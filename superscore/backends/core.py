@@ -134,3 +134,18 @@ def populate_backend(backend: _Backend, sources: Iterable[Union[Callable, str, R
                 backend.save_entry(entry)
         else:
             backend.save_entry(data)
+
+
+class LazyEntry:
+    def __init__(self, uuid: UUID, backend: _Backend):
+        self.uuid = uuid
+        self.backend = backend
+
+    def _fill(self):
+        filled = self.backend.get_entry(self.uuid, lazy=False)
+        self.__class__ = type(filled)
+        self.__dict__ = filled.__dict__
+
+    def __getattr__(self, attr: str):
+        self._fill()
+        return getattr(self, attr)
