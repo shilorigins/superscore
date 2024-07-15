@@ -105,7 +105,7 @@ class ControlLayer:
             coros = []
             for p in address:
                 coros.append(self._get_one(p))
-            return await asyncio.gather(*coros)
+            return await asyncio.gather(*coros, return_exceptions=True)
 
         return asyncio.run(gathered_coros())
 

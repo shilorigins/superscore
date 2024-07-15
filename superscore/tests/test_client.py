@@ -6,7 +6,8 @@ import pytest
 
 from superscore.backends.filestore import FilestoreBackend
 from superscore.client import Client
-from superscore.model import Root
+from superscore.errors import CommunicationError
+from superscore.model import Parameter, Readback, Root, Setpoint
 
 from .conftest import MockTaskStatus
 
@@ -52,6 +53,34 @@ def test_apply(put_mock, mock_client: Client, sample_database: Root):
 
     mock_client.apply(snap, sequential=True)
     assert put_mock.call_count == 3
+
+
+@patch('superscore.control_layers.core.ControlLayer._get_one')
+def test_snap(
+    get_mock,
+    mock_client: Client,
+    sample_database: Root,
+    parameter_with_readback: Parameter
+):
+    coll = sample_database.entries[2]
+    coll.children.append(parameter_with_readback)
+
+    get_mock.side_effect = range(5)
+    snapshot = mock_client.snap(coll)
+    assert get_mock.call_count == 5
+    assert all([snapshot.children[i].data == i for i in range(4)])  # children saved in order
+    setpoint = snapshot.children[-1]
+    assert isinstance(setpoint, Setpoint)
+    assert isinstance(setpoint.readback, Readback)
+    assert setpoint.readback.data == 4  # readback saved after setpoint
+
+
+@patch('superscore.control_layers.core.ControlLayer._get_one')
+def test_snap_exception(get_mock, mock_client: Client, sample_database: Root):
+    coll = sample_database.entries[2]
+    get_mock.side_effect = [0, 1, CommunicationError, 3, 4]
+    snapshot = mock_client.snap(coll)
+    assert snapshot.children[2].data is None
 
 
 def test_from_cfg(sscore_cfg: str):
