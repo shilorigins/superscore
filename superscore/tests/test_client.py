@@ -41,7 +41,7 @@ def sscore_cfg(xdg_config_patch: Path):
 
 
 @patch('superscore.control_layers.core.ControlLayer.put')
-def test_apply(put_mock, mock_client: Client, sample_database: Root):
+def test_apply(put_mock, mock_client: Client, sample_database: Root, setpoint_with_readback):
     put_mock.return_value = MockTaskStatus()
     snap = sample_database.entries[3]
     mock_client.apply(snap)
@@ -53,6 +53,10 @@ def test_apply(put_mock, mock_client: Client, sample_database: Root):
 
     mock_client.apply(snap, sequential=True)
     assert put_mock.call_count == 3
+
+    put_mock.reset_mock()
+    mock_client.apply(setpoint_with_readback, sequential=True)
+    assert put_mock.call_count == 1
 
 
 @patch('superscore.control_layers.core.ControlLayer._get_one')
