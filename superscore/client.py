@@ -262,54 +262,45 @@ class Client:
     def _gather_data(
         self,
         entry: Union[Entry, UUID],
-        pv_list: Optional[List[str]] = None,
-        data_list: Optional[List[Any]] = None,
         writable_only: bool = False,
-    ) -> tuple[List[str], List[Any]]:
+    ) -> tuple[List[str], Optional[List[Any]]]:
         """
-        Gather pv name - data pairs recursively.
-        If pv_list and data_list are provided, gathered data will be added to
-        these lists in-place. If both lists are omitted, this function will return
-        the two lists after gathering.
-
-        Queries the backend to fill any UUID values found.
+        Gather PV name - data pairs that are accessible from ``entry``.  Queries
+        the backend to fill any UUIDs found.
 
         Parameters
         ----------
-        entry : Union[Setpoint, Snapshot, UUID]
+        entry : Union[Entry, UUID]
             Entry to gather data from
-        pv_list : Optional[List[str]], optional
-            List of addresses to write data to, by default None
-        data_list : Optional[List[Any]], optional
-            List of data to write to addresses in ``pv_list``, by default None
         writable_only : bool
-            If True, only include writable data; by default False
+            If True, only include writable data e.g. omit Readbacks; by default False
 
         Returns
         -------
-        Optional[tuple[List[str], List[Any]]]
+        tuple[List[str], Optional[List[Any]]]
             the filled pv_list and data_list
         """
-        if pv_list is None:
-            pv_list = []
-        if isinstance(entry, (Snapshot, Setpoint, Readback)) and data_list is None:
+        pv_list = []
+        data_list = None
+        if isinstance(entry, (Snapshot, Setpoint, Readback)):
             data_list = []
 
-        if isinstance(entry, UUID):
-            filled = self.backend.get_entry(entry)
-            self._gather_data(filled, pv_list, data_list, writable_only=writable_only)
-        elif isinstance(entry, Nestable):
-            for child in entry.children:
-                self._gather_data(child, pv_list, data_list, writable_only=writable_only)
-        elif isinstance(entry, Readback) and writable_only:
-            pass
-        else:
-            pv_list.append(entry.pv_name)
-            if hasattr(entry, "data"):
-                data_list.append(entry.data)
-            if hasattr(entry, "readback") and entry.readback is not None:
-                self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
-
+        q = [entry]
+        while len(q) > 0:
+            entry = q.pop()
+            if isinstance(entry, UUID):
+                filled = self.backend.get_entry(entry)
+                q.append(filled)
+            elif isinstance(entry, Nestable):
+                q.extend(reversed(entry.children))  # preserve execution order
+            elif isinstance(entry, Readback) and writable_only:
+                pass
+            else:  # entry is Parameter, Setpoint, or Readback
+                pv_list.append(entry.pv_name)
+                if hasattr(entry, "data"):
+                    data_list.append(entry.data)
+                if hasattr(entry, "readback") and entry.readback is not None:
+                    q.append(entry.readback)
         return pv_list, data_list
 
     def _build_snapshot(
