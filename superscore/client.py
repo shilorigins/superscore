@@ -11,8 +11,8 @@ from superscore.backends.core import _Backend
 from superscore.control_layers import ControlLayer
 from superscore.control_layers.status import TaskStatus
 from superscore.errors import CommunicationError
-from superscore.model import (Collection, Entry, Parameter, Readback, Setpoint,
-                              Snapshot)
+from superscore.model import (Collection, Entry, Nestable, Parameter, Readback,
+                              Setpoint, Snapshot)
 from superscore.type_hints import AnyEpicsType
 from superscore.utils import build_abs_path
 
@@ -224,7 +224,7 @@ class Client:
 
         # Gather pv-value list and apply at once
         status_list = []
-        pv_list, data_list = self._gather_data(entry)
+        pv_list, data_list = self._gather_data(entry, writable_only=True)
         if sequential:
             for pv, data in zip(pv_list, data_list):
                 logger.debug(f'Putting {pv} = {data}')
@@ -241,47 +241,33 @@ class Client:
     def _gather_pvs(
         self,
         entry: Union[Collection, Parameter, UUID],
-        pv_list: Optional[List[str]] = None
-    ) -> Optional[List[str]]:
+    ) -> List[str]:
         """
         Collect all PV names accessible from ``entry``. Similar to _gather_data,
-        except this function collects PV names from Parameters and does not collect
-        data.  Queries the backend to fill any UUID values found.
+        except this function does not associate data with the PVs.
 
         Parameters
         ----------
         entry : Union[Collection, Parameter, UUID]
             Entry to gather PVs from
-        pv_list : Optional[List[str]]
-            List of addresses to read data from
 
         Returns
         -------
-        Optional[List[str]]
-            the filled pv_list
+        List[str]
+            the list of PV names
         """
-        if pv_list is None:
-            pv_list = []
-
-        if isinstance(entry, Collection):
-            for child in entry.children:
-                self._gather_pvs(child, pv_list)
-        elif isinstance(entry, UUID):
-            filled = self.backend.get_entry(entry)
-            self._gather_pvs(filled, pv_list)
-        elif isinstance(entry, Parameter):
-            pv_list.append(entry.pv_name)
-            self._gather_pvs(entry.readback, pv_list)
-        return pv_list
+        pvs, _ = self._gather_data(entry, writable_only=False)
+        return pvs
 
     def _gather_data(
         self,
-        entry: Union[Setpoint, Snapshot, UUID],
+        entry: Union[Entry, UUID],
         pv_list: Optional[List[str]] = None,
-        data_list: Optional[List[Any]] = None
-    ) -> Optional[tuple[List[str], List[Any]]]:
+        data_list: Optional[List[Any]] = None,
+        writable_only: bool = False,
+    ) -> tuple[List[str], List[Any]]:
         """
-        Gather writable pv name - data pairs recursively.
+        Gather pv name - data pairs recursively.
         If pv_list and data_list are provided, gathered data will be added to
         these lists in-place. If both lists are omitted, this function will return
         the two lists after gathering.
@@ -291,42 +277,45 @@ class Client:
         Parameters
         ----------
         entry : Union[Setpoint, Snapshot, UUID]
-            Entry to gather writable data from
+            Entry to gather data from
         pv_list : Optional[List[str]], optional
             List of addresses to write data to, by default None
         data_list : Optional[List[Any]], optional
             List of data to write to addresses in ``pv_list``, by default None
+        writable_only : bool
+            If True, only include writable data; by default False
 
         Returns
         -------
         Optional[tuple[List[str], List[Any]]]
             the filled pv_list and data_list
         """
-        top_level = False
-        if (pv_list is None) and (data_list is None):
+        if pv_list is None:
             pv_list = []
+        if isinstance(entry, (Snapshot, Setpoint, Readback)) and data_list is None:
             data_list = []
-            top_level = True
-        elif (pv_list is None) or (data_list is None):
-            raise ValueError(
-                "Arguments pv_list and data_list must either both be provided "
-                "or both omitted."
-            )
 
-        if isinstance(entry, Snapshot):
+        if isinstance(entry, UUID):
+            filled = self.backend.get_entry(entry)
+            self._gather_data(filled, pv_list, data_list, writable_only=writable_only)
+        elif isinstance(entry, Nestable):
             for child in entry.children:
-                self._gather_data(child, pv_list, data_list)
-        elif isinstance(entry, UUID):
-            child_entry = self.backend.get_entry(entry)
-            self._gather_data(child_entry, pv_list, data_list)
-        elif isinstance(entry, Setpoint):
-            pv_list.append(entry.pv_name)
-            data_list.append(entry.data)
+                self._gather_data(child, pv_list, data_list, writable_only=writable_only)
+        else:
+            if isinstance(entry, Parameter):
+                pv_list.append(entry.pv_name)
+                if entry.readback is not None:
+                    self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
+            elif isinstance(entry, Setpoint):
+                pv_list.append(entry.pv_name)
+                data_list.append(entry.data)
+                if entry.readback is not None:
+                    self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
+            elif isinstance(entry, Readback) and not writable_only:
+                pv_list.append(entry.pv_name)
+                data_list.append(entry.data)
 
-        # Readbacks are not writable, and are not gathered
-
-        if top_level:
-            return pv_list, data_list
+        return pv_list, data_list
 
     def _build_snapshot(
         self,
