@@ -301,19 +301,14 @@ class Client:
         elif isinstance(entry, Nestable):
             for child in entry.children:
                 self._gather_data(child, pv_list, data_list, writable_only=writable_only)
+        elif isinstance(entry, Readback) and writable_only:
+            pass
         else:
-            if isinstance(entry, Parameter):
-                pv_list.append(entry.pv_name)
-                if entry.readback is not None:
-                    self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
-            elif isinstance(entry, Setpoint):
-                pv_list.append(entry.pv_name)
+            pv_list.append(entry.pv_name)
+            if hasattr(entry, "data"):
                 data_list.append(entry.data)
-                if entry.readback is not None:
-                    self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
-            elif isinstance(entry, Readback) and not writable_only:
-                pv_list.append(entry.pv_name)
-                data_list.append(entry.data)
+            if hasattr(entry, "readback") and entry.readback is not None:
+                self._gather_data(entry.readback, pv_list, data_list, writable_only=writable_only)
 
         return pv_list, data_list
 
