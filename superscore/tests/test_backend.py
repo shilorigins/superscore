@@ -1,4 +1,5 @@
 from enum import Flag, auto
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -55,7 +56,7 @@ def test_save_entry(backends: _Backend):
     new_entry = Parameter()
 
     backends.save_entry(new_entry)
-    found_entry = backends.get_entry(new_entry.uuid)
+    found_entry = backends.get_entry(new_entry.uuid, lazy=False)
     assert found_entry == new_entry
 
     # Cannot save an entry that already exists.
@@ -69,7 +70,7 @@ def test_delete_entry(backends: _Backend):
     entry = backends.root.entries[0]
     backends.delete_entry(entry)
 
-    assert backends.get_entry(entry.uuid) is None
+    assert backends.get_entry(entry.uuid, lazy=False) is None
 
 
 @pytest.mark.parametrize('backends', [0], indirect=True)
@@ -202,3 +203,12 @@ def test_update_entry(backends: _Backend):
     p1 = Parameter()
     with pytest.raises(BackendError):
         backends.update_entry(p1)
+
+
+@pytest.mark.parametrize('backends', [0], indirect=True)
+@patch("__main__.open", wraps=open)
+def test_lazy(open_mock, backends: _Backend):
+    entry = backends.get_entry("be3c5e5c-faca-4b19-ab6c-70323abc9f24")
+    assert open_mock.call_count == 0
+    assert entry.data == 2
+    assert open_mock.call_count == 1
