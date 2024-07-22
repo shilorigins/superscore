@@ -2,7 +2,7 @@
 Backend that manipulates Entries in-memory for testing purposes.
 """
 from copy import deepcopy
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from superscore.backends.core import SearchTermType, _Backend
@@ -45,10 +45,7 @@ class TestBackend(_Backend):
             self.data.append(entry)
             self._fill_entry_cache()
 
-    def get_entry(self, uuid: Union[UUID, str]) -> Entry:
-        if isinstance(uuid, str):
-            uuid = UUID(uuid)
-
+    def _fetch_entry(self, uuid: UUID) -> Entry:
         try:
             return self._entry_cache[uuid]
         except KeyError:

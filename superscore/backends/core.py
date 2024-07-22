@@ -20,15 +20,41 @@ class SearchTerm(NamedTuple):
     value: SearchTermValue
 
 
+class LazyEntry:
+    def __init__(self, uuid: UUID, backend):
+        self.uuid = uuid
+        self.backend = backend
+
+    def _fill(self):
+        filled = self.backend.get_entry(self.uuid, lazy=False)
+        self.__class__ = type(filled)
+        self.__dict__ = filled.__dict__
+
+    def __getattr__(self, attr: str):
+        self._fill()
+        return getattr(self, attr)
+
+
 class _Backend:
     """
     Base class for data storage backend.
     """
-
-    def get_entry(self, meta_id: Union[UUID, str]) -> Entry:
+    def get_entry(self, meta_id: Union[UUID, str], lazy: bool = True) -> Union[Entry, LazyEntry]:
         """
-        Get entry with ``meta_id``
+        Get entry with ``meta_id``. Returns a LazyEntry unless ``lazy`` is False
         Throws EntryNotFoundError
+        """
+        if isinstance(meta_id, str):
+            meta_id = UUID(meta_id)
+        if lazy:
+            return LazyEntry(meta_id, self)
+        else:
+            return self._fetch_entry(meta_id)
+
+    def _fetch_entry(self, meta_id: UUID) -> Entry:
+        """
+        Query the backend for the entry with ``meta_id``
+        Throws EntryNoFoundError
         """
         raise NotImplementedError
 
@@ -134,18 +160,3 @@ def populate_backend(backend: _Backend, sources: Iterable[Union[Callable, str, R
                 backend.save_entry(entry)
         else:
             backend.save_entry(data)
-
-
-class LazyEntry:
-    def __init__(self, uuid: UUID, backend: _Backend):
-        self.uuid = uuid
-        self.backend = backend
-
-    def _fill(self):
-        filled = self.backend.get_entry(self.uuid, lazy=False)
-        self.__class__ = type(filled)
-        self.__dict__ = filled.__dict__
-
-    def __getattr__(self, attr: str):
-        self._fill()
-        return getattr(self, attr)
