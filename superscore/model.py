@@ -218,7 +218,7 @@ class Collection(Nestable, Entry):
     all_tags: ClassVar[Set[Tag]] = set()
 
     title: str = ""
-    children: List[Union[UUID, Parameter, Collection]] = field(default_factory=list)
+    children: List[Union[Parameter, Collection]] = field(default_factory=list)
     tags: Set[Tag] = field(default_factory=set)
 
     def swap_to_uuids(self) -> List[Entry]:
@@ -244,8 +244,8 @@ class Snapshot(Nestable, Entry):
     Nestable group of Values and Snapshots.  Effectively a data-filled Collection
     """
     title: str = ""
-    origin_collection: Optional[Union[UUID, Collection]] = None
-    children: List[Union[UUID, Readback, Setpoint, Snapshot]] = field(
+    origin_collection: Optional[Collection] = None
+    children: List[Union[Readback, Setpoint, Snapshot]] = field(
         default_factory=list
     )
     tags: Set[Tag] = field(default_factory=set)
