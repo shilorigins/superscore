@@ -1,4 +1,5 @@
 from enum import Flag, auto
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -57,7 +58,7 @@ def test_save_entry(test_backend: _Backend):
     new_entry = Parameter()
 
     test_backend.save_entry(new_entry)
-    found_entry = test_backend.get_entry(new_entry.uuid)
+    found_entry = test_backend.get_entry(new_entry.uuid, lazy=False)
     assert found_entry == new_entry
 
     # Cannot save an entry that already exists.
@@ -73,7 +74,7 @@ def test_delete_entry(test_backend: _Backend):
     test_backend.delete_entry(entry)
 
     with pytest.raises(EntryNotFoundError):
-        test_backend.get_entry(entry.uuid)
+        test_backend.get_entry(entry.uuid, lazy=False)
 
 
 @setup_test_stack(
@@ -228,3 +229,14 @@ def test_gather_reachable(test_backend: _Backend):
     reachable = test_backend._gather_reachable(entry)
     assert len(reachable) == 3
     assert UUID("927ef6cb-e45f-4175-aa5f-6c6eec1f3ae4") in reachable
+
+
+@setup_test_stack(
+    sources=["db/filestore.json"], backend_type=FilestoreBackend,
+)
+@patch("__main__.__builtins__.open", wraps=open)
+def test_lazy(open_mock, test_backend: _Backend):
+    entry = test_backend.get_entry("be3c5e5c-faca-4b19-ab6c-70323abc9f24")
+    assert open_mock.call_count == 0
+    assert entry.data == 2
+    assert open_mock.call_count > 0
