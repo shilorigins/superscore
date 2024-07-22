@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 from typing import List
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -721,23 +721,15 @@ def backends(request, test_backends: List[_Backend]):
     return test_backends[i]
 
 
-class DummyShim(_BaseShim):
-    """Shim that does nothing"""
-    async def get(self, *args, **kwargs):
-        return
-
-    async def put(self, *args, **kwargs):
-        return
-
-    def monitor(self, *args, **kwargs):
-        return
-
-
 @pytest.fixture(scope='function')
 def dummy_cl() -> ControlLayer:
+    mock_shim = _BaseShim()
+    mock_shim.get = AsyncMock()
+    mock_shim.put = AsyncMock()
+
     cl = ControlLayer()
-    cl.shims['ca'] = DummyShim()
-    cl.shims['pva'] = DummyShim()
+    cl.shims['ca'] = mock_shim
+    cl.shims['pva'] = mock_shim
     return cl
 
 
@@ -761,6 +753,6 @@ class MockTaskStatus:
 
 
 @pytest.fixture(scope='function')
-def mock_client(mock_backend: _Backend) -> Client:
-    client = Client(backend=mock_backend)
+def mock_client(mock_backend: _Backend, dummy_cl: ControlLayer) -> Client:
+    client = Client(backend=mock_backend, control_layer=dummy_cl)
     return client

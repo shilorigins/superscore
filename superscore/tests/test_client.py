@@ -40,38 +40,43 @@ def sscore_cfg(xdg_config_patch: Path):
     os.environ["XDG_CONFIG_HOME"] = xdg_cfg
 
 
-@patch('superscore.control_layers.core.ControlLayer.put')
-def test_apply(put_mock, mock_client: Client, sample_database: Root, setpoint_with_readback):
-    put_mock.return_value = MockTaskStatus()
+def test_apply(mock_client: Client, sample_database: Root, setpoint_with_readback):
+    mock_client.cl.shims['ca'].put.return_value = MockTaskStatus()
     snap = sample_database.entries[3]
-    mock_client.apply(snap)
-    assert put_mock.call_count == 1
-    call_args = put_mock.call_args[0]
-    assert len(call_args[0]) == len(call_args[1]) == 3
+    with patch('superscore.control_layers.core.ControlLayer.put', side_effect=mock_client.cl.put) as put_mock:
+        mock_client.apply(snap)
+        assert put_mock.call_count == 1
+        assert mock_client.cl.shims['ca'].put.call_count == 3
+        call_args = put_mock.call_args[0]
+        assert len(call_args[0]) == len(call_args[1]) == 3
 
-    put_mock.reset_mock()
+        put_mock.reset_mock()
+        mock_client.cl.shims['ca'].put.reset_mock()
 
-    mock_client.apply(snap, sequential=True)
-    assert put_mock.call_count == 3
+        mock_client.apply(snap, sequential=True)
+        assert put_mock.call_count == 3
+        assert mock_client.cl.shims['ca'].put.call_count == 3
 
-    put_mock.reset_mock()
-    mock_client.apply(setpoint_with_readback, sequential=True)
-    assert put_mock.call_count == 1
+        put_mock.reset_mock()
+        mock_client.cl.shims['ca'].put.reset_mock()
+        mock_client.apply(setpoint_with_readback, sequential=True)
+        assert put_mock.call_count == 1
+        assert mock_client.cl.shims['ca'].put.call_count == 1
 
 
-@patch('superscore.control_layers.core.ControlLayer._get_one')
 def test_snap(
-    get_mock,
     mock_client: Client,
     sample_database: Root,
     parameter_with_readback: Parameter
 ):
+    # mock_shim is shared between shim keys, so we only have to set one
+    mock_client.cl.shims['ca'].get.side_effect = range(5)
+
     coll = sample_database.entries[2]
     coll.children.append(parameter_with_readback)
 
-    get_mock.side_effect = range(5)
     snapshot = mock_client.snap(coll)
-    assert get_mock.call_count == 5
+    assert mock_client.cl.shims['ca'].get.call_count == 5
     assert all([snapshot.children[i].data == i for i in range(4)])  # children saved in order
     setpoint = snapshot.children[-1]
     assert isinstance(setpoint, Setpoint)
@@ -79,10 +84,9 @@ def test_snap(
     assert setpoint.readback.data == 4  # readback saved after setpoint
 
 
-@patch('superscore.control_layers.core.ControlLayer._get_one')
-def test_snap_exception(get_mock, mock_client: Client, sample_database: Root):
+def test_snap_exception(mock_client: Client, sample_database: Root):
+    mock_client.cl.shims['ca'].get.side_effect = [0, 1, CommunicationError, 3, 4]
     coll = sample_database.entries[2]
-    get_mock.side_effect = [0, 1, CommunicationError, 3, 4]
     snapshot = mock_client.snap(coll)
     assert snapshot.children[2].data is None
 
