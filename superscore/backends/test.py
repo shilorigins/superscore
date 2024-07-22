@@ -53,6 +53,9 @@ class TestBackend(_Backend):
         except KeyError:
             raise EntryNotFoundError(f"Entry {uuid} could not be found")
 
+    def _fetch_entry(self, uuid: UUID) -> Entry:
+        return self.get_entry(uuid)
+
     def update_entry(self, entry: Entry) -> None:
         original = self.get_entry(entry.uuid)
         original.__dict__ = entry.__dict__
