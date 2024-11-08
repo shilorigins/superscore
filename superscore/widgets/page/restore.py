@@ -61,6 +61,7 @@ class RestoreDialog(Display, QtWidgets.QWidget):
 
     cancelButton: QtWidgets.QPushButton
     restoreButton: QtWidgets.QPushButton
+    clearButton: QtWidgets.QPushButton
 
     tableWidget: QtWidgets.QTableWidget
 
@@ -88,6 +89,7 @@ class RestoreDialog(Display, QtWidgets.QWidget):
 
         self.restoreButton.clicked.connect(self.restore)
         self.cancelButton.clicked.connect(self.deleteLater)
+        self.clearButton.clicked.connect(self.clear)
 
     def restore(self):
         ephemeral_snapshot = Snapshot(children=self.entries)
@@ -98,6 +100,11 @@ class RestoreDialog(Display, QtWidgets.QWidget):
         row = self.tableWidget.currentRow()
         self.entries.pop(row)
         self.tableWidget.removeRow(row)
+
+    def clear(self) -> None:
+        self.entries = []
+        self.tableWidget.clearContents()
+        self.tableWidget.setRowCount(0)
 
 
 class LiveButton(QtWidgets.QPushButton):
