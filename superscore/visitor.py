@@ -40,7 +40,43 @@ class EntryVisitor:
 
 
 class FillUUIDVisitor(EntryVisitor):
-    pass
+    """
+    Replaces UUIDs in an Entry DAG with their corresponding Entries. Replacement is in-place, so
+    the object cannot be recovered if .visit is called on a UUID.
+    """
+    def visitParameter(self, parameter: Parameter) -> None:
+        if isinstance(parameter.readback, UUID):
+            parameter.readback = self.backend.get_entry(parameter.readback)
+
+    def visitSetpoint(self, setpoint: Setpoint) -> None:
+        if isinstance(setpoint.readback, UUID):
+            setpoint.readback = self.backend.get_entry(setpoint.readback)
+
+    def visitReadback(self, readback: Readback) -> None:
+        return
+
+    def visitCollection(self, collection: Collection) -> None:
+        filled = []
+        for entry in collection.children:
+            if isinstance(entry, UUID):
+                filled_entry = self.backend.get_entry(entry)
+                filled.append(filled_entry)
+            else:
+                filled.append(entry)
+        collection.children = filled
+
+    def visitSnapshot(self, snapshot: Snapshot) -> None:
+        filled = []
+        for entry in snapshot.children:
+            if isinstance(entry, UUID):
+                filled_entry = self.backend.get_entry(entry)
+                filled.append(filled_entry)
+            else:
+                filled.append(entry)
+        snapshot.children = filled
+
+    def visitRoot(self, root: Root) -> None:
+        return
 
 
 class SnapVisitor(EntryVisitor):
