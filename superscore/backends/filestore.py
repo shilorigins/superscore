@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import shutil
-from dataclasses import fields, replace
 from typing import Any, Container, Dict, Generator, Optional, Union
 from uuid import UUID, uuid4
 
@@ -18,7 +17,7 @@ from superscore.errors import (BackendError, EntryExistsError,
                                EntryNotFoundError)
 from superscore.model import Entry, Nestable, Root
 from superscore.utils import build_abs_path
-from superscore.visitor import SearchVisitor
+from superscore.visitor import FillUUIDVisitor, SearchVisitor
 
 logger = logging.getLogger(__name__)
 
@@ -162,31 +161,8 @@ class FilestoreBackend(_Backend):
         Entry
             a copy of ``entry`` with filled uuids
         """
-        # Create a copy of the entry to be modified
-        entry = replace(entry)
-
-        for field in fields(entry):
-            if field.name == 'uuid':
-                continue
-            field_data = getattr(entry, field.name)
-
-            if isinstance(field_data, list):
-                new_list = []
-                for item in field_data:
-                    if isinstance(item, UUID):
-                        new_ref = self._entry_cache.get(item)
-                        if new_ref:
-                            new_ref = self.fill_uuids(new_ref)
-                            new_list.append(new_ref)
-
-                if new_list:
-                    setattr(entry, field.name, new_list)
-            elif isinstance(field_data, UUID):
-                new_ref = self._entry_cache.get(field_data)
-                if new_ref:
-                    new_ref = self.fill_uuids(new_ref)
-                    setattr(entry, field.name)
-
+        visitor = FillUUIDVisitor(self)
+        visitor.visit(entry)
         return entry
 
     def store(self) -> None:

@@ -16,6 +16,7 @@ from superscore.model import (Collection, Entry, Nestable, Parameter, Readback,
                               Setpoint, Snapshot)
 from superscore.search_term import SearchTerm, SearchTermType
 from superscore.utils import build_abs_path
+from superscore.visitor import FillUUIDVisitor
 
 logger = logging.getLogger(__name__)
 
@@ -217,37 +218,29 @@ class Client:
 
         return EntryDiff(original_entry=entry_l, new_entry=entry_r, diffs=list(diffs))
 
-    def fill(self, entry: Union[Entry, UUID], fill_depth: Optional[int] = None) -> None:
+    def fill(self, entry: Union[Entry, UUID], fill_depth: int = -1) -> Entry:
         """
         Walk through ``entry`` and replace UUIDs with corresponding Entry's.
-        Does nothing if ``entry`` is a non-Nestable or UUID.
-        Filling happens "in-place", modifying ``entry``.
+        Filling happens "in-place", modifying ``entry``, unless ``entry`` is a
+        UUID. The filled entry is returned
 
         Parameters
         ----------
         entry : Union[Entry, UUID]
             Entry that may contain UUIDs to be filled with full Entry's
-        fill_depth : Optional[int], by default None
-            The depth to fill.  (value of 1 will fill just ``entry``'s children)
-            If None, fill until there is no filling left
+        fill_depth : int, by default -1
+            The depth to fill.  (value of 1 will fill just ``entry``)
+            If negative, fill until there is no filling left
+
+        Return
+        ------
+        The filled entry
         """
-        if fill_depth is not None:
-            fill_depth -= 1
-            if fill_depth <= 0:
-                return
 
-        if isinstance(entry, Nestable):
-            new_children = []
-            for child in entry.children:
-                if isinstance(child, UUID):
-                    search_condition = SearchTerm('uuid', 'eq', child)
-                    filled_child = list(self.search(search_condition))[0]
-                    self.fill(filled_child, fill_depth)
-                    new_children.append(filled_child)
-                else:
-                    new_children.append(child)
-
-            entry.children = new_children
+        to_fill = self.get(entry) if isinstance(entry, UUID) else entry
+        visitor = FillUUIDVisitor(self.backend, fill_depth=fill_depth)
+        visitor.visit(to_fill)
+        return to_fill
 
     def snap(self, entry: Collection) -> Snapshot:
         """
