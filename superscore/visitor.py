@@ -44,6 +44,17 @@ class FillUUIDVisitor(EntryVisitor):
     Replaces UUIDs in an Entry DAG with their corresponding Entries. Replacement is in-place, so
     the object cannot be recovered if .visit is called on a UUID.
     """
+    def __init__(self, backend, fill_depth: int = -1):
+        super().__init__(backend)
+        self.fill_depth = fill_depth
+        self.depth = 0
+
+    def visit(self, entry: Union[Entry, Root, UUID]) -> None:
+        self.depth += 1
+        if self.depth < self.fill_depth:
+            super().visit(entry)
+        self.depth -= 1
+
     def visitParameter(self, parameter: Parameter) -> None:
         if isinstance(parameter.readback, UUID):
             parameter.readback = self.backend.get_entry(parameter.readback)
