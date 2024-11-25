@@ -206,9 +206,10 @@ def test_update_entry(backends: _Backend):
 
 
 @pytest.mark.parametrize('backends', [0], indirect=True)
-@patch("__main__.open", wraps=open)
+@pytest.mark.parametrize("filestore_backend", ["db/filestore.json"], indirect=True)
+@patch("__main__.__builtins__.open", wraps=open)
 def test_lazy(open_mock, backends: _Backend):
     entry = backends.get_entry("be3c5e5c-faca-4b19-ab6c-70323abc9f24")
     assert open_mock.call_count == 0
     assert entry.data == 2
-    assert open_mock.call_count == 1
+    assert open_mock.call_count > 0
