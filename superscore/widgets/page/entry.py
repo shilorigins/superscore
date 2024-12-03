@@ -4,6 +4,7 @@ Widgets for visualizing and editing core model dataclasses
 import logging
 from copy import deepcopy
 from typing import Optional, Union
+from uuid import UUID
 
 import qtawesome as qta
 from qtpy import QtWidgets
@@ -35,6 +36,7 @@ class NestablePage(Display, DataWidget, WindowLinker):
     sub_pv_table_view: LivePVTableView
 
     save_button: QtWidgets.QPushButton
+    snapshot_button: QtWidgets.QPushButton
 
     data: Nestable
 
@@ -67,6 +69,8 @@ class NestablePage(Display, DataWidget, WindowLinker):
         self.sub_coll_table_view.data_updated.connect(self.track_changes)
 
         self.save_button.clicked.connect(self.save)
+        self.snapshot_button.clicked.connect(self.take_snapshot)
+        self.snapshot_button.setText("Take new Snapshot")
 
         self.set_editable(self.editable)
 
@@ -100,6 +104,26 @@ class NestablePage(Display, DataWidget, WindowLinker):
         logger.debug(f"Stopping polling threads for {type(self.data)}")
         self.sub_pv_table_view._model.stop_polling(wait_time=5000)
         return super().closeEvent(a0)
+
+    def take_snapshot(self) -> None:
+        # TODO: if data dirty, abort
+        # open RestorePage
+        # get MainWindow, call .open_restore_page(Snapshot)?
+        # implement Singleton, or use QApplication.topLevelWidgets(), or self.parent.parent... until QMainWindow?
+        window = self.parent()
+        while not isinstance(window, QtWidgets.QMainWindow):
+            window = window.parent()
+        entry = self.data
+        if isinstance(entry, Snapshot):
+            origin = entry.origin_collection
+            if isinstance(origin, UUID):
+                entry = self.client.backend.get_entry(origin)
+            else:
+                entry = origin
+        snapshot = self.client.snap(entry)
+        self.client.save(snapshot)
+        window.open_restore_page(snapshot=snapshot)
+        return
 
 
 class CollectionPage(NestablePage):
