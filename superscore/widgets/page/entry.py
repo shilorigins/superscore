@@ -122,6 +122,7 @@ class NestablePage(Display, DataWidget, WindowLinker):
                 entry = origin
         snapshot = self.client.snap(entry)
         self.client.save(snapshot)
+        self.refresh_window()
         window.open_restore_page(snapshot=snapshot)
         return
 
