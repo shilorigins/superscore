@@ -11,6 +11,7 @@ from qtpy import QtWidgets
 from qtpy.QtGui import QCloseEvent
 
 from superscore.control_layers._base_shim import EpicsData
+from superscore.errors import EntryNotFoundError
 from superscore.model import (Collection, Nestable, Parameter, Readback,
                               Setpoint, Severity, Snapshot, Status)
 from superscore.type_hints import AnyEpicsType
@@ -116,8 +117,15 @@ class NestablePage(Display, DataWidget, WindowLinker):
         entry = self.data
         if isinstance(entry, Snapshot):
             origin = entry.origin_collection
-            if isinstance(origin, UUID):
-                entry = self.client.backend.get_entry(origin)
+            if origin is None:
+                logging.error("The original collection is unknown: cannot save snapshot")
+                return
+            elif isinstance(origin, UUID):
+                try:
+                    entry = self.client.backend.get_entry(origin)
+                except EntryNotFoundError:
+                    logging.error("The original collection does not exist: cannot save snapshot")
+                    return
             else:
                 entry = origin
         snapshot = self.client.snap(entry)
