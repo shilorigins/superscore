@@ -3,6 +3,7 @@ Widgets for visualizing and editing core model dataclasses
 """
 import logging
 from copy import deepcopy
+from functools import partial
 from typing import Optional, Union
 from uuid import UUID
 
@@ -70,7 +71,7 @@ class NestablePage(Display, DataWidget, WindowLinker):
         self.sub_coll_table_view.data_updated.connect(self.track_changes)
 
         self.save_button.clicked.connect(self.save)
-        self.snapshot_button.clicked.connect(self.take_snapshot)
+        self.snapshot_button.clicked.connect(self.prompt_for_snap_metadata)
         self.snapshot_button.setText("Take new Snapshot")
 
         self.set_editable(self.editable)
@@ -106,14 +107,7 @@ class NestablePage(Display, DataWidget, WindowLinker):
         self.sub_pv_table_view._model.stop_polling(wait_time=5000)
         return super().closeEvent(a0)
 
-    def take_snapshot(self) -> None:
-        # TODO: if data dirty, abort
-        # open RestorePage
-        # get MainWindow, call .open_restore_page(Snapshot)?
-        # implement Singleton, or use QApplication.topLevelWidgets(), or self.parent.parent... until QMainWindow?
-        window = self.parent()
-        while not isinstance(window, QtWidgets.QMainWindow):
-            window = window.parent()
+    def prompt_for_snap_metadata(self) -> None:
         entry = self.data
         if isinstance(entry, Snapshot):
             origin = entry.origin_collection
@@ -128,7 +122,49 @@ class NestablePage(Display, DataWidget, WindowLinker):
                     return
             else:
                 entry = origin
+
+        dummy_snapshot = Snapshot(tags=entry.tags.copy())
+        metadata_dialog = QtWidgets.QDialog(parent=self)
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(NameDescTagsWidget(data=dummy_snapshot))
+        buttonBox = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel
+        )
+        layout.addWidget(buttonBox)
+        buttonBox.accepted.connect(metadata_dialog.accept)
+        buttonBox.rejected.connect(metadata_dialog.reject)
+        metadata_dialog.setLayout(layout)
+        metadata_dialog.accepted.connect(partial(self.take_snapshot, dummy_snapshot))
+        metadata_dialog.open()
+
+    def take_snapshot(self, dummy_snapshot: Optional[Snapshot] = None) -> None:
+        # TODO: if data dirty, abort
+        # open RestorePage
+        # get MainWindow, call .open_restore_page(Snapshot)?
+        # implement Singleton, or use QApplication.topLevelWidgets(), or self.parent.parent... until QMainWindow?
+        entry = self.data
+        if isinstance(entry, Snapshot):
+            origin = entry.origin_collection
+            if origin is None:
+                logging.error("The original collection is unknown: cannot save snapshot")
+                return
+            elif isinstance(origin, UUID):
+                try:
+                    entry = self.client.backend.get_entry(origin)
+                except EntryNotFoundError:
+                    logging.error("The original collection does not exist: cannot save snapshot")
+                    return
+            else:
+                entry = origin
+
+        window = self.parent()
+        while not isinstance(window, QtWidgets.QMainWindow):
+            window = window.parent()
+
         snapshot = self.client.snap(entry)
+        snapshot.title = dummy_snapshot.title
+        snapshot.tags = dummy_snapshot.tags
+        snapshot.description = dummy_snapshot.description
         self.client.save(snapshot)
         self.refresh_window()
         window.open_restore_page(snapshot=snapshot)
