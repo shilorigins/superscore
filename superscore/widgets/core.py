@@ -157,7 +157,6 @@ class NameDescTagsWidget(Display, NameMixin, DataWidget):
         # Setup the saving/loading
         self.desc_edit.textChanged.connect(self.update_saved_desc)
         self.bridge.description.changed_value.connect(self.apply_new_desc)
-        self.desc_edit.textChanged.connect(self.update_text_height)
 
     def update_saved_desc(self) -> None:
         """
