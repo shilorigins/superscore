@@ -3,7 +3,7 @@ Base superscore data storage backend interface
 """
 import re
 from collections.abc import Container, Generator
-from typing import Callable, Iterable, NamedTuple, Union
+from typing import Any, Callable, Iterable, NamedTuple, Union
 from uuid import UUID
 
 import superscore.tests.conftest_data
@@ -24,14 +24,28 @@ class LazyEntry:
     def __init__(self, uuid: UUID, backend):
         self.uuid = uuid
         self.backend = backend
+        self._entry = None
 
-    def _fill(self):
-        filled = self.backend.get_entry(self.uuid, lazy=False)
-        self.__dict__ = filled.__dict__
+    @property
+    def entry(self) -> Entry:
+        if self._entry is None:
+            self._entry = self.backend._fetch_entry(self.uuid)
+        return self._entry
 
     def __getattr__(self, attr: str):
-        self._fill()
-        return getattr(self, attr)
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            return getattr(self.entry, attr)
+
+    def __setattr__(self, attr: str, value: Any):
+        try:
+            super().__setattr__(attr, value)
+        except AttributeError:
+            setattr(self.entry, attr, value)
+
+    def __eq__(self, obj):
+        return self.entry == obj
 
 
 class _Backend:
