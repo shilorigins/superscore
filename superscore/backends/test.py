@@ -39,7 +39,7 @@ class TestBackend(_Backend):
 
     def save_entry(self, entry: Entry) -> None:
         try:
-            self.get_entry(entry.uuid)
+            self.get_entry(entry.uuid, lazy=False)
             raise EntryExistsError(f"Entry {entry.uuid} already exists")
         except EntryNotFoundError:
             self.data.append(entry)
