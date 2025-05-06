@@ -1,9 +1,11 @@
 import argparse
 from enum import IntEnum
 
-from superscore.backends.filestore import FilestoreBackend
+from superscore.backends.directory import DirectoryBackend
 from superscore.client import Client
 from superscore.model import Collection, Parameter
+
+DESTINATION = '.prod_pvs/'
 
 
 class Program(IntEnum):
@@ -12,45 +14,51 @@ class Program(IntEnum):
     LCLS2 = 3
 
 
+class TagGroup(IntEnum):
+    PROGRAM = 0
+    REGION = 1
+    AREA = 2
+    SUBSYSTEM = 3
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("file")
     args = parser.parse_args()
     with open(args.file, 'r') as f:
         lines = f.read().split('\n')
-    lcls = Collection(
-        title="LCLS",
-        description="",
-    )
-    facet = Collection(
-        title="FACET",
-        description="",
-    )
-    lcls2 = Collection(
-        title="LCLS-II",
-        description="",
-    )
-    cache = {}
+
+    tag_groups = {
+        0: ["Program", "", {}],
+        1: ["Region", "", {}],
+        2: ["Area", "", {}],
+        3: ["Subsystem", "", {}],
+    }
+
+    global_coll = Collection(description="Placeholder Collection before data model refactor")
+
     for line in lines[1:-1]:
         region, setpoint, readback, alias, area, subsystem, program_id = line.split(",")
-        if region not in cache:
-            cache[region] = Collection(title=region)
-            match int(program_id):
-                case Program.LCLS:
-                    lcls.children.append(cache[region])
-                case Program.FACET:
-                    facet.children.append(cache[region])
-                case Program.LCLS2:
-                    lcls2.children.append(cache[region])
-        region_coll = cache[region]
-        if (region, area) not in cache:
-            cache[(region, area)] = Collection(title=area, description=f"{area} within {region}")
-            region_coll.children.append(cache[(region, area)])
-        area_coll = cache[(region, area)]
-        if (region, area, subsystem) not in cache:
-            cache[(region, area, subsystem)] = Collection(title=subsystem, description=f"{subsystem} in {area} within {region}")
-            area_coll.children.append(cache[(region, area, subsystem)])
-        subsystem_coll = cache[(region, area, subsystem)]
+        program = Program(program_id).name
+        program_tags = tag_groups[TagGroup.PROGRAM][2]
+        if program not in program_tags.values():
+            program_tag_id = max(program_tags.key()) + 1
+            program_tags.update(program_tag_id=program)
+
+        region_tags = tag_groups[TagGroup.REGION][2]
+        if region not in region_tags.values():
+            region_tag_id = max(region_tags.key()) + 1
+            region_tags.update(region_tag_id=region)
+
+        area_tags = tag_groups[TagGroup.AREA][2]
+        if area not in area_tags.values():
+            area_tag_id = max(area_tags.key()) + 1
+            area_tags.update(area_tag_id=area)
+
+        subsystem_tags = tag_groups[TagGroup.SUBSYSTEM][2]
+        if subsystem not in subsystem_tags.values():
+            subsystem_tag_id = max(subsystem_tags.key()) + 1
+            subsystem_tags.update(subsystem_tag_id=subsystem)
 
         readback_param = None
         if readback != "NA":
@@ -60,18 +68,22 @@ if __name__ == "__main__":
                 read_only=True,
             )
         if setpoint == "NA":
-            subsystem_coll.children.append(readback_param)
+            global_coll.children.append(readback_param)
         else:
             setpoint_param = Parameter(
                 pv_name=setpoint,
                 readback=readback_param,
                 description=alias,
+                tags={
+                    TagGroup.PROGRAM: {program_tag_id},
+                    TagGroup.REGION: {region_tag_id},
+                    TagGroup.AREA: {area_tag_id},
+                    TagGroup.SUBSYSTEM: {subsystem_tag_id},
+                }
             )
-            subsystem_coll.children.append(setpoint_param)
+            global_coll.children.append(setpoint_param)
 
     client = Client(
-        backend=FilestoreBackend("prod_linac.json")
+        backend=DirectoryBackend(DESTINATION)
     )
-    client.save(lcls)
-    client.save(facet)
-    client.save(lcls2)
+    client.save(global_coll)
